@@ -1,0 +1,22 @@
+(()=>{
+const q=s=>document.querySelector(s),safe=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function openCalendar(){
+  if(!profile?.household_id||!session?.user?.id)return toast('HomeFund is still loading. Try again in a second.');
+  modal(`<p class="kicker">FINANCIAL CALENDAR</p><h2>Add calendar item</h2><form class="form" id="hfCalendarFixForm"><label>Title<input name="title" required maxlength="120" placeholder="Phone bill, payday, appointment..."></label><label>Date<input type="date" name="date" required></label><label>Type<select name="type"><option value="bill">Bill</option><option value="payday">Payday</option><option value="savings">Savings</option><option value="purchase">Purchase</option><option value="event">Event</option></select></label><label>Amount <small>(optional)</small><input type="number" min="0" step="0.01" name="amount" placeholder="0.00"></label><label>Note <small>(optional)</small><input name="note" maxlength="200"></label><div class="form-actions"><button class="primary" id="hfCalendarFixSave">Add to Calendar</button></div></form>`);
+  q('#hfCalendarFixForm').onsubmit=async e=>{e.preventDefault();const b=q('#hfCalendarFixSave'),f=new FormData(e.target);b.disabled=true;b.textContent='Adding…';const payload={household_id:profile.household_id,user_id:session.user.id,title:String(f.get('title')).trim(),event_date:f.get('date'),item_type:f.get('type'),amount:f.get('amount')!==''?Number(f.get('amount')):null,note:String(f.get('note')||'').trim()||null};const {error}=await sb.from('calendar_items').insert(payload);if(error){b.disabled=false;b.textContent='Add to Calendar';return toast(error.message)}close();toast('Calendar item added.');setTimeout(()=>location.reload(),450)};
+}
+function openContribution(){
+  if(!profile?.household_id||!session?.user?.id)return toast('HomeFund is still loading. Try again in a second.');
+  const mine=(typeof goals!=='undefined'?goals:[]).filter(g=>!g.is_shared&&g.user_id===session.user.id);
+  modal(`<p class="kicker">SAVINGS CONTRIBUTIONS</p><h2>Add savings contribution</h2><p class="card-note">This updates the same tracked savings balance shown on your Overview page.</p><form class="form" id="hfContributionFixForm"><label>Amount<input name="amount" type="number" min="0.01" step="0.01" required placeholder="0.00"></label><label>Apply to a goal <small>(optional)</small><select name="goal"><option value="">General savings</option>${mine.map(g=>`<option value="${g.id}">${safe(g.name)}</option>`).join('')}</select></label><label>Note <small>(optional)</small><input name="note" maxlength="200"></label><div class="form-actions"><button class="primary" id="hfContributionFixSave">Add Contribution</button></div></form>`);
+  q('#hfContributionFixForm').onsubmit=async e=>{e.preventDefault();const b=q('#hfContributionFixSave'),f=new FormData(e.target),amount=Number(f.get('amount')),goal=f.get('goal')||null;b.disabled=true;b.textContent='Adding…';
+    const {error}=await sb.from('savings_contributions').insert({household_id:profile.household_id,user_id:session.user.id,goal_id:goal,amount,note:String(f.get('note')||'').trim()||null});if(error){b.disabled=false;b.textContent='Add Contribution';return toast(error.message)}
+    const savings=(typeof accounts!=='undefined'?accounts:[]).find(a=>a.user_id===session.user.id&&a.kind==='savings');if(!savings){b.disabled=false;b.textContent='Add Contribution';return toast('Contribution was logged, but your savings account could not be found.')}
+    const upd=await sb.from('accounts').update({balance:Number(savings.balance||0)+amount}).eq('id',savings.id).eq('user_id',session.user.id);if(upd.error){b.disabled=false;b.textContent='Add Contribution';return toast('Contribution logged, but savings balance update failed: '+upd.error.message)}
+    if(goal){const r=await sb.rpc('add_to_homefund_goal',{p_goal_id:goal,p_amount:amount});if(r.error)console.warn('Goal contribution update:',r.error)}
+    close();toast('Savings contribution added.');setTimeout(()=>location.reload(),450)
+  };
+}
+function bind(){const cal=q('#addCalendar'),con=q('#addContribution');if(cal){cal.disabled=false;cal.style.pointerEvents='auto';cal.onclick=e=>{e.preventDefault();e.stopPropagation();openCalendar()}}if(con){con.disabled=false;con.style.pointerEvents='auto';con.onclick=e=>{e.preventDefault();e.stopPropagation();openContribution()}}}
+window.addEventListener('load',()=>setTimeout(bind,1200));setTimeout(bind,500);setInterval(bind,1800);
+})();
