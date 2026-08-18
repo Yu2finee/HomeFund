@@ -1,0 +1,22 @@
+(()=>{
+const q=s=>document.querySelector(s), money=n=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(Number(n)||0);
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function dateOnly(v){if(!v)return null;const d=new Date(v+'T12:00:00');return isNaN(d)?null:d}
+function daysUntil(v){const d=dateOnly(v);if(!d)return null;const n=new Date();n.setHours(12,0,0,0);return Math.ceil((d-n)/86400000)}
+function billPaid(b){return Number(b.paid_amount||0)}
+function billLeft(b){return Math.max(0,Number(b.amount||0)-billPaid(b))}
+function dueText(days){if(days===0)return 'Due today';if(days===1)return 'Due tomorrow';if(days>1)return `Due in ${days} days`;if(days===-1)return '1 day overdue';return `${Math.abs(days)} days overdue`}
+function ensure(){if(q('#todayCenter'))return;const overview=q('#overview .dashboard');if(!overview)return;const box=document.createElement('article');box.className='panel family-wide today-center';box.id='todayCenter';box.innerHTML='<div class="panel-head"><div><p class="kicker">TODAY</p><h3>Your money day at a glance</h3></div><span class="today-date" id="todayCenterDate"></span></div><div id="todayCenterItems"></div>';
+overview.prepend(box)}
+function render(){ensure();const host=q('#todayCenterItems');if(!host||typeof bills==='undefined')return;const now=new Date();q('#todayCenterDate').textContent=now.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+const items=[];
+const upcoming=(bills||[]).map(b=>({b,days:daysUntil(b.due_date||b.next_due_date)})).filter(x=>x.days!==null&&x.days<=7&&billLeft(x.b)>0).sort((a,b)=>a.days-b.days);
+upcoming.slice(0,4).forEach(({b,days})=>items.push(`<div class="today-item bill-warning ${days<=1?'urgent':''}"><div class="today-icon">◷</div><div><b>${esc(b.name)}</b><small>${dueText(days)} · ${money(billPaid(b))} paid · ${money(billLeft(b))} remaining</small></div><strong>${money(b.amount)}</strong></div>`));
+if(typeof goals!=='undefined'){const mine=(goals||[]).filter(g=>g.user_id===session?.user?.id&&!g.is_shared).sort((a,b)=>(Number(b.current_amount)/Number(b.target||1))-(Number(a.current_amount)/Number(a.target||1)))[0];if(mine){const p=Math.min(100,Math.round(Number(mine.current_amount)/Number(mine.target||1)*100));items.push(`<div class="today-item"><div class="today-icon">◎</div><div><b>${esc(mine.name)}</b><small>Savings goal is ${p}% complete · ${money(mine.current_amount)} of ${money(mine.target)}</small></div></div>`)}}
+const plans=(window.HomeFundPlannerData||[]);const next=plans.map(p=>({p,days:daysUntil(p.pay_date)})).filter(x=>x.days!==null&&x.days>=0).sort((a,b)=>a.days-b.days)[0];if(next)items.push(`<div class="today-item"><div class="today-icon">$</div><div><b>Payday ${next.days===0?'is today':`in ${next.days} day${next.days===1?'':'s'}`}</b><small>${esc(next.p.name||'Paycheck')} · planned ${money(next.p.expected_amount)}</small></div></div>`);
+if(!items.length)items.push('<p class="card-note">Nothing urgent today. Upcoming bills due within 7 days will appear here.</p>');host.innerHTML=items.join('')}
+const style=document.createElement('style');style.textContent='.today-center{grid-column:1/-1}.today-date{font-size:11px;font-weight:700;color:#607086}.today-item{display:grid;grid-template-columns:38px 1fr auto;align-items:center;gap:12px;padding:13px 0;border-bottom:1px solid #e7ecf1}.today-item:last-child{border-bottom:0}.today-item b{display:block;font-size:12px}.today-item small{display:block;margin-top:4px;color:#68778a;font-size:10px}.today-icon{width:34px;height:34px;border-radius:10px;background:#edf4fb;display:grid;place-items:center;font-weight:800;color:#0a5fb4}.bill-warning.urgent{background:#fff8f3;border:1px solid #f0d4c1;border-radius:11px;padding:12px;margin:7px 0}.bill-warning.urgent+.today-item{border-top:0}@media(max-width:600px){.today-item{grid-template-columns:34px 1fr}.today-item>strong{grid-column:2}}';document.head.appendChild(style);
+const oldRender=window.render;window.render=function(){const r=oldRender.apply(this,arguments);setTimeout(render,0);return r};
+window.addEventListener('load',()=>setTimeout(render,800));
+window.HomeFundTodayRefresh=render;
+})();
